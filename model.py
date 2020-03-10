@@ -1,6 +1,5 @@
 from __future__ import print_function, division
 
-from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, concatenate
 from keras.layers import BatchNormalization, Activation, Embedding, ZeroPadding2D
 from keras.layers.advanced_activations import LeakyReLU
@@ -83,7 +82,7 @@ class ACGAN():
         model.summary()
 
         noise = Input(shape=(self.latent_dim,))
-        label = Input(shape=(self.num_classes,), dtype='float32')
+        label = Input(shape=(self.num_classes,))
         
         model_input = concatenate([noise, label], axis=1)
         img = model(model_input)
@@ -169,7 +168,7 @@ class ACGAN():
 
         return (trainX, trainy)
 
-    def train(self, epochs, batch_size=64, sample_interval=50):
+    def train(self, epochs, batch_size=32, sample_interval=50):
 
         # Load the dataset
         X_train, y_train = self.load_data()
@@ -194,7 +193,8 @@ class ACGAN():
 
             # The labels of the digits that the generator tries to create an
             # image representation of
-            sampled_labels = np.random.randint(2, (batch_size, self.num_classes))
+            sampled_labels = np.random.uniform(0, 1, (batch_size, self.num_classes))
+            sampled_labels = np.around(sampled_labels)
 
             # Generate a half batch of new images
             gen_imgs = self.generator.predict([noise, sampled_labels])
@@ -216,7 +216,7 @@ class ACGAN():
 
             # Plot the progress
             print("%d [D loss: %f, acc.: %.2f%%, op_acc: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[3], 100*d_loss[4], g_loss[0]))
-            self.write_log( ['D loss', 'G loss'], [d_loss[0], g_loss[0]], epoch)
+            self.write_log( ['D loss', 'G loss', 'accuracy'], [d_loss[0], g_loss[0], 100*d_loss[3]], epoch)
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
@@ -226,7 +226,8 @@ class ACGAN():
     def sample_images(self, epoch):
         r, c = 10, 10
         noise = np.random.normal(0, 1, (r * c, self.latent_dim))
-        sampled_labels = np.array([np.random.randint(2, 5) for _ in range(r*c)])
+        sampled_labels = np.random.uniform(0, 1, (r*c, self.num_classes))
+        sampled_labels = np.around(sampled_labels)
         gen_imgs = self.generator.predict([noise, sampled_labels])
         # Rescale images 0 - 1
         gen_imgs = 0.5 * gen_imgs + 0.5
