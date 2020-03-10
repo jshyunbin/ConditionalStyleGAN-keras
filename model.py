@@ -10,17 +10,18 @@ from keras.optimizers import Adam
 
 import matplotlib.pyplot as plt
 import tensorflow as tf
+import keras
 
 import numpy as np
 
 class ACGAN():
     def __init__(self):
         # Input shape
-        self.img_rows = 28
-        self.img_cols = 28
-        self.channels = 1
+        self.img_rows = 64
+        self.img_cols = 64
+        self.channels = 3
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
-        self.num_classes = 10
+        self.num_classes = 5
         self.latent_dim = 100
         log_path = './logs'
         self.writer = tf.summary.FileWriter(log_path)
@@ -40,7 +41,7 @@ class ACGAN():
         # The generator takes noise and the target label as input
         # and generates the corresponding digit of that label
         noise = Input(shape=(self.latent_dim,))
-        label = Input(shape=(1,))
+        label = Input(shape=(self.num_classes,))
         img = self.generator([noise, label])
 
         # For the combined model we will only train the generator
@@ -60,8 +61,12 @@ class ACGAN():
 
         model = Sequential()
 
-        model.add(Dense(128 * 7 * 7, activation="relu", input_dim=self.latent_dim))
-        model.add(Reshape((7, 7, 128)))
+        model.add(Dense(256 * 8 * 8, activation="relu", input_dim=self.latent_dim))
+        model.add(Reshape((8, 8, 256)))
+        model.add(BatchNormalization(momentum=0.8))
+        model.add(UpSampling2D())
+        model.add(Conv2D(256, kernel_size=3, padding="same"))
+        model.add(Activation("relu"))
         model.add(BatchNormalization(momentum=0.8))
         model.add(UpSampling2D())
         model.add(Conv2D(128, kernel_size=3, padding="same"))
@@ -77,10 +82,9 @@ class ACGAN():
         model.summary()
 
         noise = Input(shape=(self.latent_dim,))
-        label = Input(shape=(1,), dtype='int32')
-        label_embedding = Flatten()(Embedding(self.num_classes, self.latent_dim)(label))
-
-        model_input = multiply([noise, label_embedding])
+        label = Input(shape=(self.num_classes,), dtype='int32')
+        label = label.astype(np.float32)
+        model_input = np.concatenate((noise, label), axis=1)
         img = model(model_input)
 
         return Model([noise, label], img)
