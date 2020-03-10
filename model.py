@@ -7,11 +7,12 @@ from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.convolutional import UpSampling2D, Conv2D
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
-
+from PIL import Image
+import PIL
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import keras
-
+import os
 import numpy as np
 
 class ACGAN():
@@ -130,14 +131,49 @@ class ACGAN():
 
         return Model(img, [validity, label])
 
+    def load_data(self):
+        print("Loading celebA dataset ...")
+        print(os.getcwd())
+
+        train_img_file = sorted([os.path.join('dataset/train', fname) for fname in os.listdir('dataset/train')])
+        # loading labels
+        label_file = open('dataset/list_attr_celeba_full.txt', 'r').readlines()
+
+        label = [[0. if i == '-1' else 1. for i in x.split()[1:]] for x in label_file[2:]]
+
+        label_filtered = [[label[i][36], label[i][15], label[i][20], label[i][22], label[i][31]] for i in range(len(label))]
+
+        trainy = [x for x in label_filtered[:len(train_img_file)]]
+
+        trainX = []
+
+        print(label_filtered[0])
+
+        for path in train_img_file:
+            img = Image.open(path)
+            img = np.asarray(img)
+            
+            h, w = img.shape[:2]
+            h_start = int(round((h - 108) / 2.))
+            w_start = int(round((w - 108) / 2.))
+            # resize image
+            image = Image.fromarray(img[h_start:h_start + 108, w_start:w_start + 108])
+            img_crop = np.array(image.resize((64, 64), PIL.Image.BICUBIC))
+
+            trainX.append(img_crop)
+
+        # make numpy arrays
+        trainX = np.array(trainX)
+        trainX = (trainX - 127.5) / 127.5
+        trainy = np.array(trainy)
+
+        return (trainX, trainy)
+
     def train(self, epochs, batch_size=64, sample_interval=50):
 
         # Load the dataset
-        (X_train, y_train), (_, _) = mnist.load_data()
-        # Configure inputs
-        X_train = (X_train.astype(np.float32) - 127.5) / 127.5
-        X_train = np.expand_dims(X_train, axis=3)
-        y_train = y_train.reshape(-1, 1)
+        X_train, y_train = self.load_data()
+        print(X_train.shape, y_train.shape)
 
         # Adversarial ground truths
         valid = np.ones((batch_size, 1))
@@ -158,7 +194,7 @@ class ACGAN():
 
             # The labels of the digits that the generator tries to create an
             # image representation of
-            sampled_labels = np.random.randint(0, 10, (batch_size, 1))
+            sampled_labels = np.random.randint(2, (batch_size, self.num_classes))
 
             # Generate a half batch of new images
             gen_imgs = self.generator.predict([noise, sampled_labels])
@@ -190,7 +226,7 @@ class ACGAN():
     def sample_images(self, epoch):
         r, c = 10, 10
         noise = np.random.normal(0, 1, (r * c, self.latent_dim))
-        sampled_labels = np.array([num for _ in range(r) for num in range(c)])
+        sampled_labels = np.array([np.random.randint(2, 5) for _ in range(r*c)])
         gen_imgs = self.generator.predict([noise, sampled_labels])
         # Rescale images 0 - 1
         gen_imgs = 0.5 * gen_imgs + 0.5
@@ -199,7 +235,7 @@ class ACGAN():
         cnt = 0
         for i in range(r):
             for j in range(c):
-                axs[i,j].imshow(gen_imgs[cnt,:,:,0], cmap='gray')
+                axs[i,j].imshow(gen_imgs[cnt,:,:,:])
                 axs[i,j].axis('off')
                 cnt += 1
         fig.savefig("images/%d.png" % epoch)
