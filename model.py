@@ -1,7 +1,7 @@
 from __future__ import print_function, division
 
 from keras.datasets import mnist
-from keras.layers import Input, Dense, Reshape, Flatten, Dropout, multiply
+from keras.layers import Input, Dense, Reshape, Flatten, Dropout, concatenate
 from keras.layers import BatchNormalization, Activation, Embedding, ZeroPadding2D
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.convolutional import UpSampling2D, Conv2D
@@ -61,7 +61,7 @@ class ACGAN():
 
         model = Sequential()
 
-        model.add(Dense(256 * 8 * 8, activation="relu", input_dim=self.latent_dim))
+        model.add(Dense(256 * 8 * 8, activation="relu", input_dim=self.latent_dim+self.num_classes))
         model.add(Reshape((8, 8, 256)))
         model.add(BatchNormalization(momentum=0.8))
         model.add(UpSampling2D())
@@ -82,9 +82,9 @@ class ACGAN():
         model.summary()
 
         noise = Input(shape=(self.latent_dim,))
-        label = Input(shape=(self.num_classes,), dtype='int32')
-        label = label.astype(np.float32)
-        model_input = np.concatenate((noise, label), axis=1)
+        label = Input(shape=(self.num_classes,), dtype='float32')
+        
+        model_input = concatenate([noise, label], axis=1)
         img = model(model_input)
 
         return Model([noise, label], img)
