@@ -4,10 +4,13 @@ from keras.layers import Input, Dense, Reshape, Flatten, Dropout, concatenate
 from keras.layers import BatchNormalization, Activation, Embedding, ZeroPadding2D
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.convolutional import UpSampling2D, Conv2D
-from keras.models import Sequential, Model
+from keras.models import Sequential, Model, model_from_json
 from keras.optimizers import Adam
 from PIL import Image
+from absl import app
+from absl import flags
 import PIL
+import h5py
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import keras
@@ -15,7 +18,7 @@ import os
 import numpy as np
 
 class ACGAN():
-    def __init__(self):
+    def __init__(self, load_model=False):
         # Input shape
         self.img_rows = 64
         self.img_cols = 64
@@ -26,17 +29,30 @@ class ACGAN():
         log_path = './logs'
         self.writer = tf.summary.FileWriter(log_path)
 
-        optimizer = Adam(0.0002, 0.5)
+        
+
+        dis_opt = Adam(0.0002, 0.5)
+        gan_opt = Adam(0.0002, 0.5)
         losses = ['binary_crossentropy', 'categorical_crossentropy']
 
         # Build and compile the discriminator
-        self.discriminator = self.build_discriminator()
+        if load_model is True:
+            json_file_gen = open('saved_model/generator.json', 'r')
+            json_file_dis = open('saved_model/discriminator.json', 'r')
+            generator_json = json_file_gen.read()
+            self.generator = model_from_json(generator_json)
+            self.generator.load_weights('saved_model/generator_%dweights.hdf5' % FLAGS.load_model)
+            discriminator_json = json_file_dis.read()
+            self.discriminator = model_from_json(discriminator_json)
+            self.discriminator.load_weights('saved_model/discriminator_%dweights.hdf5' % FLAGS.load_model)
+        else:
+            self.discriminator = self.build_discriminator()
+            self.generator = self.build_generator()
+        
         self.discriminator.compile(loss=losses,
-            optimizer=optimizer,
+            optimizer=dis_opt,
             metrics=['accuracy'])
 
-        # Build the generator
-        self.generator = self.build_generator()
 
         # The generator takes noise and the target label as input
         # and generates the corresponding digit of that label
@@ -55,7 +71,7 @@ class ACGAN():
         # Trains the generator to fool the discriminator
         self.combined = Model([noise, label], [valid, target_label])
         self.combined.compile(loss=losses,
-            optimizer=optimizer)
+            optimizer=gan_opt)
 
     def build_generator(self):
 
@@ -63,19 +79,19 @@ class ACGAN():
 
         model.add(Dense(256 * 8 * 8, activation="relu", input_dim=self.latent_dim+self.num_classes))
         model.add(Reshape((8, 8, 256)))
-        model.add(BatchNormalization(momentum=0.8))
+        model.add(BatchNormalization(momentum=0.9))
         model.add(UpSampling2D())
         model.add(Conv2D(256, kernel_size=3, padding="same"))
         model.add(Activation("relu"))
-        model.add(BatchNormalization(momentum=0.8))
+        model.add(BatchNormalization(momentum=0.9))
         model.add(UpSampling2D())
         model.add(Conv2D(128, kernel_size=3, padding="same"))
         model.add(Activation("relu"))
-        model.add(BatchNormalization(momentum=0.8))
+        model.add(BatchNormalization(momentum=0.9))
         model.add(UpSampling2D())
         model.add(Conv2D(64, kernel_size=3, padding="same"))
         model.add(Activation("relu"))
-        model.add(BatchNormalization(momentum=0.8))
+        model.add(BatchNormalization(momentum=0.9))
         model.add(Conv2D(self.channels, kernel_size=3, padding='same'))
         model.add(Activation("tanh"))
 
@@ -93,26 +109,34 @@ class ACGAN():
 
         model = Sequential()
 
-        model.add(Conv2D(8, kernel_size=3, strides=2, input_shape=self.img_shape, padding="same"))
+        model.add(Conv2D(4, kernel_size=3, strides=2, input_shape=self.img_shape, padding="same"))
         model.add(LeakyReLU(alpha=0.2))
         model.add(Dropout(0.25))
+        model.add(Conv2D(8, kernel_size=3, strides=1, padding="same"))
+        model.add(LeakyReLU(alpha=0.2))
+        model.add(Dropout(0.25))
+        model.add(BatchNormalization(momentum=0.8))
         model.add(Conv2D(16, kernel_size=3, strides=2, padding="same"))
         model.add(LeakyReLU(alpha=0.2))
         model.add(Dropout(0.25))
         model.add(BatchNormalization(momentum=0.8))
-        model.add(Conv2D(32, kernel_size=3, strides=2, padding="same"))
+        model.add(Conv2D(32, kernel_size=3, strides=1, padding="same"))
         model.add(LeakyReLU(alpha=0.2))
         model.add(Dropout(0.25))
         model.add(BatchNormalization(momentum=0.8))
-        model.add(Conv2D(64, kernel_size=3, strides=1, padding="same"))
+        model.add(Conv2D(64, kernel_size=3, strides=2, padding="same"))
         model.add(LeakyReLU(alpha=0.2))
         model.add(Dropout(0.25))
         model.add(BatchNormalization(momentum=0.8))
-        model.add(Conv2D(128, kernel_size=3, strides=2, padding="same"))
+        model.add(Conv2D(128, kernel_size=3, strides=1, padding="same"))
         model.add(LeakyReLU(alpha=0.2))
         model.add(Dropout(0.25))
         model.add(BatchNormalization(momentum=0.8))
-        model.add(Conv2D(256, kernel_size=3, strides=1, padding="same"))
+        model.add(Conv2D(256, kernel_size=3, strides=2, padding="same"))
+        model.add(LeakyReLU(alpha=0.2))
+        model.add(Dropout(0.25))
+        model.add(BatchNormalization(momentum=0.8))
+        model.add(Conv2D(512, kernel_size=3, strides=1, padding="same"))
         model.add(LeakyReLU(alpha=0.2))
         model.add(Dropout(0.25))
 
@@ -132,7 +156,17 @@ class ACGAN():
 
     def load_data(self):
         print("Loading celebA dataset ...")
-        print(os.getcwd())
+
+        dataset_file = 'dataset/celeba.hdf5'
+
+        if os.path.isfile(dataset_file):
+            f = h5py.File(dataset_file, 'r')
+            trainX, trainy = f.get('image'), f.get('label')
+            f.close()
+            trainX = np.array(trainX)
+            trainy = np.array(trainy)
+            return (trainX, trainy)
+
 
         train_img_file = sorted([os.path.join('dataset/train', fname) for fname in os.listdir('dataset/train')])
         # loading labels
@@ -146,7 +180,6 @@ class ACGAN():
 
         trainX = []
 
-        print(label_filtered[0])
 
         for path in train_img_file:
             img = Image.open(path)
@@ -165,20 +198,25 @@ class ACGAN():
         trainX = np.array(trainX)
         trainX = (trainX - 127.5) / 127.5
         trainy = np.array(trainy)
+        
+        hf = h5py.File(dataset_file, 'w')
+        hf.create_dataset('image', data=trainX)
+        hf.create_dataset('label', data=trainy)
+        hf.close()
 
         return (trainX, trainy)
 
-    def train(self, epochs, batch_size=32, sample_interval=50):
+
+    def train(self, epochs, batch_size=32, sample_interval=50, start_point=0):
 
         # Load the dataset
         X_train, y_train = self.load_data()
-        print(X_train.shape, y_train.shape)
 
         # Adversarial ground truths
         valid = np.ones((batch_size, 1))
         fake = np.zeros((batch_size, 1))
 
-        for epoch in range(epochs):
+        for epoch in range(start_point, epochs):
 
             # ---------------------
             #  Train Discriminator
@@ -220,7 +258,7 @@ class ACGAN():
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
-                self.save_model()
+                self.save_model(epoch)
                 self.sample_images(epoch)
 
     def sample_images(self, epoch):
@@ -242,25 +280,38 @@ class ACGAN():
         fig.savefig("images/%d.png" % epoch)
         plt.close()
 
-    def save_model(self):
+    def save_model(self, step):
 
-        def save(model, model_name):
+        def save(model, model_name, step):
             model_path = "saved_model/%s.json" % model_name
-            weights_path = "saved_model/%s_weights.hdf5" % model_name
+            weights_path = "saved_model/%s_%dweights.hdf5" % (model_name, step)
             options = {"file_arch": model_path,
                         "file_weight": weights_path}
             json_string = model.to_json()
             open(options['file_arch'], 'w').write(json_string)
             model.save_weights(options['file_weight'])
 
-        save(self.generator, "generator")
-        save(self.discriminator, "discriminator")
+        save(self.generator, "generator", step)
+        save(self.discriminator, "discriminator", step)
 
     def write_log(self, names, logs, step):
         for name, value in zip(names, logs):
             summary = tf.Summary(value=[tf.Summary.Value(tag=name, simple_value=value)])
             self.writer.add_summary(summary, step)
 
+FLAGS = flags.FLAGS
+
+flags.DEFINE_integer('load_model', 0, 'Epoch num. of the model you wish to open.')
+
+
+def main(argv):
+    if FLAGS.load_model == 0:
+        acgan = ACGAN()
+        acgan.train(epochs=14000, batch_size=128, sample_interval=200)
+    else:
+        acgan = ACGAN(True)
+        acgan.train(epochs=14000, batch_size=128, sample_interval=200, start_point=FLAGS.load_model + 1)
+
+
 if __name__ == '__main__':
-    acgan = ACGAN()
-    acgan.train(epochs=14000, batch_size=32, sample_interval=200)
+    app.run(main)
