@@ -3,7 +3,7 @@ from __future__ import print_function, division
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, concatenate
 from keras.layers import BatchNormalization, Activation, Embedding, ZeroPadding2D
 from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.convolutional import UpSampling2D, Conv2D
+from keras.layers.convolutional import UpSampling2D, Conv2D, Conv2DTranspose
 from keras.models import Sequential, Model, model_from_json
 from keras.optimizers import Adam
 from PIL import Image
@@ -37,6 +37,8 @@ class ACGAN():
 
         # Build and compile the discriminator
         if load_model is True:
+            print('Loading ACGAN model...')
+            print('Using epoch %d model' % FLAGS.load_model)
             json_file_gen = open('saved_model/generator.json', 'r')
             json_file_dis = open('saved_model/discriminator.json', 'r')
             generator_json = json_file_gen.read()
@@ -77,22 +79,19 @@ class ACGAN():
 
         model = Sequential()
 
-        model.add(Dense(256 * 8 * 8, activation="relu", input_dim=self.latent_dim+self.num_classes))
-        model.add(Reshape((8, 8, 256)))
-        model.add(BatchNormalization(momentum=0.9))
-        model.add(UpSampling2D())
-        model.add(Conv2D(256, kernel_size=3, padding="same"))
+        model.add(Dense(512 * 4 * 4, activation="relu", input_dim=self.latent_dim+self.num_classes))
+        model.add(Reshape((4, 4, 512)))
+        model.add(BatchNormalization())
+        model.add(Conv2DTranspose(256, 4, strides=(2, 2), padding='same'))
         model.add(Activation("relu"))
-        model.add(BatchNormalization(momentum=0.9))
-        model.add(UpSampling2D())
-        model.add(Conv2D(128, kernel_size=3, padding="same"))
+        model.add(BatchNormalization())
+        model.add(Conv2DTranspose(128, 4, strides=(2, 2), padding='same'))
         model.add(Activation("relu"))
-        model.add(BatchNormalization(momentum=0.9))
-        model.add(UpSampling2D())
-        model.add(Conv2D(64, kernel_size=3, padding="same"))
+        model.add(BatchNormalization())
+        model.add(Conv2DTranspose(64, 4, strides=(2, 2), padding='same'))
         model.add(Activation("relu"))
-        model.add(BatchNormalization(momentum=0.9))
-        model.add(Conv2D(self.channels, kernel_size=3, padding='same'))
+        model.add(BatchNormalization())
+        model.add(Conv2DTranspose(self.channels, 4, strides=(2, 2), padding='same'))
         model.add(Activation("tanh"))
 
         model.summary()
@@ -160,6 +159,7 @@ class ACGAN():
         dataset_file = 'dataset/celeba.hdf5'
 
         if os.path.isfile(dataset_file):
+            print('Loading dataset from saved file')
             f = h5py.File(dataset_file, 'r')
             trainX, trainy = f.get('image'), f.get('label')
             f.close()
@@ -203,6 +203,8 @@ class ACGAN():
         hf.create_dataset('image', data=trainX)
         hf.create_dataset('label', data=trainy)
         hf.close()
+
+        print('Saved dataset for faster load')
 
         return (trainX, trainy)
 
@@ -307,10 +309,10 @@ flags.DEFINE_integer('load_model', 0, 'Epoch num. of the model you wish to open.
 def main(argv):
     if FLAGS.load_model == 0:
         acgan = ACGAN()
-        acgan.train(epochs=14000, batch_size=128, sample_interval=200)
+        acgan.train(epochs=50000, batch_size=128, sample_interval=200)
     else:
         acgan = ACGAN(True)
-        acgan.train(epochs=14000, batch_size=128, sample_interval=200, start_point=FLAGS.load_model + 1)
+        acgan.train(epochs=50000, batch_size=128, sample_interval=200, start_point=FLAGS.load_model + 1)
 
 
 if __name__ == '__main__':
