@@ -73,8 +73,7 @@ class ACGAN():
         # The combined model  (stacked generator and discriminator)
         # Trains the generator to fool the discriminator
         self.combined = Model([noise, label], [valid, target_label])
-        self.combined.compile(loss=losses,
-            optimizer=gan_opt)
+        self.combined.compile(loss=losses, optimizer=gan_opt)
 
     def build_generator(self):
 
@@ -247,6 +246,15 @@ class ACGAN():
                 self.save_model(epoch)
                 self.sample_images(epoch)
 
+    def validate(self):
+        noise = np.random.normal(0, 1, (10, self.latent_dim))
+        
+        for i in range(2**5):
+            label_str = "{:05b}".format(i)
+            print(label_str)
+            label = np.array([[int(label_str[j]) for j in range(len(label_str))] for _ in range(10)])
+            self.write_image('Image: {}'.format(label_str), 0.5 * self.generator.predict([noise, label]) + 0.5)
+
     def sample_images(self, epoch):
         r, c = 10, 10
         noise = np.random.normal(0, 1, (r * c, self.latent_dim))
@@ -297,16 +305,21 @@ class ACGAN():
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('load_model', 0, 'Epoch num. of the model you wish to open.')
+flags.DEFINE_integer('load_model', 49800, 'Epoch num. of the model you wish to open.')
+flags.DEFINE_boolean('validate', False, 'Generate images with the latest generator model with given classes.')
 
 
 def main(argv):
-    if FLAGS.load_model == 0:
-        acgan = ACGAN()
-        acgan.train(epochs=50000, batch_size=128, sample_interval=200)
-    else:
+    if FLAGS.validate:
         acgan = ACGAN(True)
-        acgan.train(epochs=50000, batch_size=128, sample_interval=200, start_point=FLAGS.load_model + 1)
+        acgan.validate()
+    else:
+        if FLAGS.load_model == 0:
+            acgan = ACGAN()
+            acgan.train(epochs=50000, batch_size=128, sample_interval=200)
+        else:
+            acgan = ACGAN(True)
+            acgan.train(epochs=50000, batch_size=128, sample_interval=200, start_point=FLAGS.load_model + 1)
 
 
 if __name__ == '__main__':
