@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import keras
 import os
+import io
 import numpy as np
 
 class ACGAN():
@@ -33,7 +34,7 @@ class ACGAN():
 
         dis_opt = Adam(0.0002, 0.5)
         gan_opt = Adam(0.0002, 0.5)
-        losses = ['binary_crossentropy', 'categorical_crossentropy']
+        losses = ['binary_crossentropy', 'binary_crossentropy']
 
         # Build and compile the discriminator
         if load_model is True:
@@ -133,7 +134,7 @@ class ACGAN():
 
         # Determine validity and label of the image
         validity = Dense(1, activation="sigmoid")(features)
-        label = Dense(self.num_classes, activation="softmax")(features)
+        label = Dense(self.num_classes, activation="sigmoid")(features)
 
         return Model(img, [validity, label])
 
@@ -147,6 +148,7 @@ class ACGAN():
             f = h5py.File(dataset_file, 'r')
             trainX, trainy = f['image'].value, f['label'].value
             f.close()
+            self.write_image('Dataset', trainX[:10] * 0.5 + 0.5)
             return (trainX, trainy)
 
 
@@ -237,8 +239,8 @@ class ACGAN():
             g_loss = self.combined.train_on_batch([noise, sampled_labels], [valid, sampled_labels])
 
             # Plot the progress
-            print("%d [D loss: %f, acc.: %.2f%%, op_acc: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[3], 100*d_loss[4], g_loss[0]))
-            self.write_log( ['D loss', 'G loss', 'accuracy'], [d_loss[0], g_loss[0], 100*d_loss[3]], epoch)
+            print("%d [LC loss: %f, acc.: %.2f%%, op_acc: %.2f%%] [LS loss: %f]" % (epoch, (d_loss[0] + g_loss[0])/2, 100*d_loss[3], 100*d_loss[4], (d_loss[0] - g_loss[0])/2))
+            self.write_log( ['LC loss', 'LS loss', 'accuracy'], [(d_loss[0] + g_loss[0])/2, (d_loss[0] - g_loss[0])/2, 100*d_loss[3]], epoch)
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
@@ -253,7 +255,7 @@ class ACGAN():
         gen_imgs = self.generator.predict([noise, sampled_labels])
         # Rescale images 0 - 1
         gen_imgs = 0.5 * gen_imgs + 0.5
-
+        self.write_image('Generated Image', gen_imgs[:10], step=epoch)
         fig, axs = plt.subplots(r, c)
         cnt = 0
         for i in range(r):
@@ -281,6 +283,16 @@ class ACGAN():
     def write_log(self, names, logs, step):
         for name, value in zip(names, logs):
             summary = tf.Summary(value=[tf.Summary.Value(tag=name, simple_value=value)])
+            self.writer.add_summary(summary, step)
+
+    def write_image(self, name, images, step=None):
+        for i in range(images.shape[0]):
+            output = io.BytesIO()
+            image = Image.fromarray((images[i] * 255).astype('uint8'))
+            image.save(output, 'PNG')
+            image_string = output.getvalue()
+            output.close()
+            summary = tf.Summary(value=[tf.Summary.Value(tag=name, image=tf.Summary.Image(height=64, width=64, colorspace=3, encoded_image_string=image_string))])
             self.writer.add_summary(summary, step)
 
 FLAGS = flags.FLAGS
