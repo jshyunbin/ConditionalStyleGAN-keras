@@ -248,12 +248,19 @@ class ACGAN():
 
     def validate(self):
         noise = np.random.normal(0, 1, (10, self.latent_dim))
+
+        fig, axs = plt.subplots(4, 8)
         
         for i in range(2**5):
             label_str = "{:05b}".format(i)
             print(label_str)
             label = np.array([[int(label_str[j]) for j in range(len(label_str))] for _ in range(10)])
-            self.write_image('Image: {}'.format(label_str), 0.5 * self.generator.predict([noise, label]) + 0.5)
+            imgs = 0.5 * self.generator.predict([noise, label]) + 0.5
+            self.write_image('Image: {}'.format(label_str), imgs)
+            axs[i//(2**4), i%(2**4)].imshow(imgs[0])
+            axs[i//(2**4), i%(2**4)].axis('off')
+        fig.savefig('images/validate.png')
+        plt.close()
 
     def sample_images(self, epoch):
         r, c = 10, 10
