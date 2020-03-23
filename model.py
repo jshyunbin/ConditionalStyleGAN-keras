@@ -257,8 +257,8 @@ class ACGAN():
             label = np.array([[int(label_str[j]) for j in range(len(label_str))] for _ in range(10)])
             imgs = 0.5 * self.generator.predict([noise, label]) + 0.5
             self.write_image('Image: {}'.format(label_str), imgs)
-            axs[i//(2**4), i%(2**4)].imshow(imgs[0])
-            axs[i//(2**4), i%(2**4)].axis('off')
+            axs[i//(2**3), i%(2**3)].imshow(imgs[0])
+            axs[i//(2**3), i%(2**3)].axis('off')
         fig.savefig('images/validate.png')
         plt.close()
 
