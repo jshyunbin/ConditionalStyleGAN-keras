@@ -246,7 +246,7 @@ class ACGAN():
                 self.save_model(epoch)
                 self.sample_images(epoch)
 
-    def validate(self, glasses, male):
+    def validate(self, glasses=False, male=False):
         noise = np.random.normal(0, 1, (10, self.latent_dim))
 
         fig, axs = plt.subplots(4, 8)
@@ -254,12 +254,12 @@ class ACGAN():
         for i in range(2**5):
             if glasses: 
                 if i%(2**3) <= 1:
-                    lable_str = "00000"
+                    label_str = "00000"
                 else:
                     label_str = "01000"
             elif male:
                 if i%(2**3) <= 1:
-                    lable_str = "00000"
+                    label_str = "00000"
                 else:
                     label_str = "00100"
             else:
@@ -270,7 +270,7 @@ class ACGAN():
             self.write_image('Image: {}'.format(label_str), imgs)
             axs[i//(2**3), i%(2**3)].imshow(imgs[0])
             axs[i//(2**3), i%(2**3)].axis('off')
-        fig.savefig('images/validate.png')
+        fig.savefig('images_condition/validate{}{}.png'.format('_glasses' if glasses else '', '_male' if male else ''))
         plt.close()
 
     def sample_images(self, epoch):
