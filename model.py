@@ -246,13 +246,24 @@ class ACGAN():
                 self.save_model(epoch)
                 self.sample_images(epoch)
 
-    def validate(self):
+    def validate(self, glasses, male):
         noise = np.random.normal(0, 1, (10, self.latent_dim))
 
         fig, axs = plt.subplots(4, 8)
         
         for i in range(2**5):
-            label_str = "{:05b}".format(i)
+            if glasses: 
+                if i%(2**3) <= 1:
+                    lable_str = "00000"
+                else:
+                    label_str = "01000"
+            elif male:
+                if i%(2**3) <= 1:
+                    lable_str = "00000"
+                else:
+                    label_str = "00100"
+            else:
+                label_str = "{:05b}".format(i)
             print(label_str)
             label = np.array([[int(label_str[j]) for j in range(len(label_str))] for _ in range(10)])
             imgs = 0.5 * self.generator.predict([noise, label]) + 0.5
@@ -314,12 +325,14 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_integer('load_model', 49800, 'Epoch num. of the model you wish to open.')
 flags.DEFINE_boolean('validate', False, 'Generate images with the latest generator model with given classes.')
+flags.DEFINE_boolean('glasses', False, 'Generate only glasses images when validate')
+flags.DEFINE_boolean('male', False, 'Generate only male images when validate')
 
 
 def main(argv):
     if FLAGS.validate:
         acgan = ACGAN(True)
-        acgan.validate()
+        acgan.validate(glasses=FLAGS.glasses, male=FLAGS.male)
     else:
         if FLAGS.load_model == 0:
             acgan = ACGAN()
