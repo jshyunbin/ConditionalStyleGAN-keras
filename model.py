@@ -248,24 +248,26 @@ class ACGAN():
 
     def validate(self, glasses=False, male=False):
         noise = np.random.normal(0, 1, (10, self.latent_dim))
-
+        
         if glasses or male:
-            fig, axs = plt.subplots(2, 10)
-            label = np.array([[0, 0, 0, 0, 0] for _ in range(10)])
-            img_default = 0.5 * self.generator.predict([noise, label]) + 0.5
-            for i in range(10):
-                axs[0, i].imshow(img_default[i])
-                axs[0, i].axis('off')
-            if glasses:
-                label = np.array([[0, 1, 0, 0, 0] for _ in range(10)])
-                img_condition = 0.5 * self.generator.predict([noise, label]) + 0.5
-            elif male:
-                label = np.array([[0, 0, 1, 0, 0] for _ in range(10)])
-                img_condition = 0.5 * self.generator.predict([noise, label]) + 0.5
-            for i in range(10):
-                axs[1, i].imshow(img_default[i])
-                axs[1, i].axis('off')
-            fig.savefig('images_condition/validate{}{}.png'.format('_glasses' if glasses else '_male'))
+            for j in range(10):
+                noise = np.random.normal(0, 1, (10, self.latent_dim))
+                fig, axs = plt.subplots(2, 10)
+                label = np.array([[0, 0, 0, 0, 0] for _ in range(10)])
+                img_default = 0.5 * self.generator.predict([noise, label]) + 0.5
+                for i in range(10):
+                    axs[0, i].imshow(img_default[i])
+                    axs[0, i].axis('off')
+                if glasses:
+                    label = np.array([[0, 1, 0, 0, 0] for _ in range(10)])
+                    img_condition = 0.5 * self.generator.predict([noise, label]) + 0.5
+                elif male:
+                    label = np.array([[0, 0, 1, 0, 0] for _ in range(10)])
+                    img_condition = 0.5 * self.generator.predict([noise, label]) + 0.5
+                for i in range(10):
+                    axs[1, i].imshow(img_condition[i])
+                    axs[1, i].axis('off')
+                fig.savefig('images_condition/validate{}{}.png'.format('_glasses' if glasses else '_male', j))
             return
             
         fig, axs = plt.subplots(4, 8)
