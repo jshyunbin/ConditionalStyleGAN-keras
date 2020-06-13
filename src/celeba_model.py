@@ -17,6 +17,7 @@ import keras
 import os
 import io
 import numpy as np
+import utils
 
 class ACGAN():
     def __init__(self, load_model=False):
@@ -27,10 +28,8 @@ class ACGAN():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         self.num_classes = 5
         self.latent_dim = 100
-        log_path = './logs'
+        log_path = '../logs'
         self.writer = tf.summary.FileWriter(log_path)
-
-        
 
         dis_opt = Adam(0.0002, 0.5)
         gan_opt = Adam(0.0002, 0.5)
@@ -40,14 +39,14 @@ class ACGAN():
         if load_model is True:
             print('Loading ACGAN model...')
             print('Using epoch %d model' % FLAGS.load_model)
-            json_file_gen = open('saved_model/generator.json', 'r')
-            json_file_dis = open('saved_model/discriminator.json', 'r')
+            json_file_gen = open('../saved_model/generator.json', 'r')
+            json_file_dis = open('../saved_model/discriminator.json', 'r')
             generator_json = json_file_gen.read()
             self.generator = model_from_json(generator_json)
-            self.generator.load_weights('saved_model/generator_%dweights.hdf5' % FLAGS.load_model)
+            self.generator.load_weights('../saved_model/generator_%dweights.hdf5' % FLAGS.load_model)
             discriminator_json = json_file_dis.read()
             self.discriminator = model_from_json(discriminator_json)
-            self.discriminator.load_weights('saved_model/discriminator_%dweights.hdf5' % FLAGS.load_model)
+            self.discriminator.load_weights('../saved_model/discriminator_%dweights.hdf5' % FLAGS.load_model)
         else:
             self.discriminator = self.build_discriminator()
             self.generator = self.build_generator()
@@ -140,20 +139,20 @@ class ACGAN():
     def load_data(self):
         print("Loading celebA dataset ...")
 
-        dataset_file = 'dataset/celeba.hdf5'
+        dataset_file = '../dataset/celeba.hdf5'
 
         if os.path.isfile(dataset_file):
             print('Loading dataset from saved file')
             f = h5py.File(dataset_file, 'r')
             trainX, trainy = f['image'].value, f['label'].value
             f.close()
-            self.write_image('Dataset', trainX[:10] * 0.5 + 0.5)
+            utils.write_image(self.writer, 'Dataset', trainX[:10] * 0.5 + 0.5)
             return (trainX, trainy)
 
 
-        train_img_file = sorted([os.path.join('dataset/train', fname) for fname in os.listdir('dataset/train')])
+        train_img_file = sorted([os.path.join('../dataset/train', fname) for fname in os.listdir('../dataset/train')])
         # loading labels
-        label_file = open('dataset/list_attr_celeba_full.txt', 'r').readlines()
+        label_file = open('../dataset/list_attr_celeba_full.txt', 'r').readlines()
 
         label = [[0. if i == '-1' else 1. for i in x.split()[1:]] for x in label_file[2:]]
 
@@ -239,11 +238,11 @@ class ACGAN():
 
             # Plot the progress
             print("%d [LC loss: %f, acc.: %.2f%%, op_acc: %.2f%%] [LS loss: %f]" % (epoch, (d_loss[0] + g_loss[0])/2, 100*d_loss[3], 100*d_loss[4], (d_loss[0] - g_loss[0])/2))
-            self.write_log( ['LC loss', 'LS loss', 'accuracy'], [(d_loss[0] + g_loss[0])/2, (d_loss[0] - g_loss[0])/2, 100*d_loss[3]], epoch)
+            utils.write_log( self.writer, ['LC loss', 'LS loss', 'accuracy'], [(d_loss[0] + g_loss[0])/2, (d_loss[0] - g_loss[0])/2, 100*d_loss[3]], epoch)
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
-                self.save_model(epoch)
+                utils.save_model('celeba', self.generator, self.discriminator, epoch)
                 self.sample_images(epoch)
 
     def validate(self, glasses=False, male=False):
@@ -267,7 +266,7 @@ class ACGAN():
                 for i in range(10):
                     axs[1, i].imshow(img_condition[i])
                     axs[1, i].axis('off')
-                fig.savefig('images_condition/validate{}{}.png'.format('_glasses' if glasses else '_male', j))
+                fig.savefig('../images_condition/validate{}{}.png'.format('_glasses' if glasses else '_male', j))
             return
             
         fig, axs = plt.subplots(4, 8)
@@ -277,10 +276,10 @@ class ACGAN():
             print(label_str)
             label = np.array([[int(label_str[j]) for j in range(len(label_str))] for _ in range(10)])
             imgs = 0.5 * self.generator.predict([noise, label]) + 0.5
-            self.write_image('Image: {}'.format(label_str), imgs)
+            utils.write_image(self.writer, 'Image: {}'.format(label_str), imgs)
             axs[i//(2**3), i%(2**3)].imshow(imgs[0])
             axs[i//(2**3), i%(2**3)].axis('off')
-        fig.savefig('images_condition/validate{}{}.png'.format('_glasses' if glasses else '', '_male' if male else ''))
+        fig.savefig('../images_condition/validate{}{}.png'.format('_glasses' if glasses else '', '_male' if male else ''))
         plt.close()
 
     def sample_images(self, epoch):
@@ -291,7 +290,7 @@ class ACGAN():
         gen_imgs = self.generator.predict([noise, sampled_labels])
         # Rescale images 0 - 1
         gen_imgs = 0.5 * gen_imgs + 0.5
-        self.write_image('Generated Image', gen_imgs[:10], step=epoch)
+        utils.write_image(self.writer, 'Generated Image', gen_imgs[:10], step=epoch)
         fig, axs = plt.subplots(r, c)
         cnt = 0
         for i in range(r):
@@ -299,37 +298,8 @@ class ACGAN():
                 axs[i,j].imshow(gen_imgs[cnt,:,:,:])
                 axs[i,j].axis('off')
                 cnt += 1
-        fig.savefig("images/%d.png" % epoch)
+        fig.savefig("../images/%d.png" % epoch)
         plt.close()
-
-    def save_model(self, step):
-
-        def save(model, model_name, step):
-            model_path = "saved_model/%s.json" % model_name
-            weights_path = "saved_model/%s_%dweights.hdf5" % (model_name, step)
-            options = {"file_arch": model_path,
-                        "file_weight": weights_path}
-            json_string = model.to_json()
-            open(options['file_arch'], 'w').write(json_string)
-            model.save_weights(options['file_weight'])
-
-        save(self.generator, "generator", step)
-        save(self.discriminator, "discriminator", step)
-
-    def write_log(self, names, logs, step):
-        for name, value in zip(names, logs):
-            summary = tf.Summary(value=[tf.Summary.Value(tag=name, simple_value=value)])
-            self.writer.add_summary(summary, step)
-
-    def write_image(self, name, images, step=None):
-        for i in range(images.shape[0]):
-            output = io.BytesIO()
-            image = Image.fromarray((images[i] * 255).astype('uint8'))
-            image.save(output, 'PNG')
-            image_string = output.getvalue()
-            output.close()
-            summary = tf.Summary(value=[tf.Summary.Value(tag=name, image=tf.Summary.Image(height=64, width=64, colorspace=3, encoded_image_string=image_string))])
-            self.writer.add_summary(summary, step)
 
 FLAGS = flags.FLAGS
 
