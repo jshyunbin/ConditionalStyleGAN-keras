@@ -1,9 +1,24 @@
-import urlib.request
+import urllib.request   
 import io
+import os
+from os import listdir
+from os.path import isfile, join
 
-file_dir = input('url file name \n>')
-file = open('../dataset/imageNet/'+file_dir, 'r')
-lines = file.readlines()
+path = '../dataset/imageNet/'
+onlyfiles = [f for f in listdir(path) if isfile(join(path, f))]
 
-for i in range(lines):
-    urlib.request.urlretrieve(lines[i], '../dataset/imageNet/%s/%04d.jpg' % (file_dir, i))
+for file in onlyfiles:
+    file = join(path, file)
+    ofile = open(file, 'r')
+    lines = ofile.readlines()
+    os.mkdir(file[:-4])
+    for i in range(len(lines)):
+        try:
+            urllib.request.urlretrieve(lines[i], join(file[:-4], '%04d.jpg' % i))
+        except urllib.error.HTTPError as err:
+            continue
+        except urllib.error.URLError as err:
+            continue
+        if i % 10 == 0:
+            print('%dth in progress...' % i)
+    print(file + ' done')
