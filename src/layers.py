@@ -65,14 +65,17 @@ class AdaInstanceNormalization(Layer):
     
         return input_shape[0]
 
-def d_block(inp, fil, p = True):
-    
-    route2 = Conv2D(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_normal')(inp)
-    route2 = LeakyReLU(0.01)(route2)
+def d_block(inp, fil, p = True, init=False):
+    if init:
+        inp.add(Conv2D(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_normal', input_shape=(64, 64, 3)))
+    else:
+        inp.add(Conv2D(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_normal'))
+    inp.add(LeakyReLU(0.01))
+
     if p:
-        route2 = AveragePooling2D()(route2)
-    route2 = Conv2D(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_normal')(route2)
-    out = LeakyReLU(0.01)(route2)
+        inp.add(AveragePooling2D())
+    inp.add(Conv2D(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_normal'))
+    inp.add(LeakyReLU(0.01))
     
-    return out
+    return inp
 

@@ -15,11 +15,11 @@ import keras
 import os
 import io
 import numpy as np
-import src.utils
-import src.layers
+import utils
+import layers
 
 class ACGAN():
-    def __init__(self, flags, load_model=False):
+    def __init__(self, flags):
         # Input shape
         self.flags = flags
         self.img_rows = 64
@@ -36,7 +36,7 @@ class ACGAN():
         losses = ['binary_crossentropy', 'binary_crossentropy']
 
         # Build and compile the discriminator
-        if load_model is True:
+        if self.flags.load_model is True:
             print('Loading ACGAN model...')
             print('Using epoch %d model' % self.flags.load_model)
             json_file_gen = open('../saved_model/generator.json', 'r')
@@ -111,38 +111,20 @@ class ACGAN():
 
         inp = Input([self.img_rows, self.img_rows, self.channels])
 
-        x = d
-
         model = Sequential()
+        model = layers.d_block(model, 32, init=True)
+        model = layers.d_block(model, 64)
+        model = layers.d_block(model, 128)
+        model = layers.d_block(model, 256)
 
-        model.add(Conv2D(64, kernel_size=4, strides=2, input_shape=self.img_shape, padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(Conv2D(128, kernel_size=4, strides=2, padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Conv2D(256, kernel_size=4, strides=2, padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Conv2D(512, kernel_size=4, strides=2, padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-
-        model.add(Flatten())
         model.summary()
 
-        img = Input(shape=self.img_shape)
-
-        # Extract feature representation
-        features = model(img)
-
-        # Determine validity and label of the image
-        validity = Dense(1, activation="sigmoid")(features)
-        label = Dense(self.num_classes, activation="sigmoid")(features)
-
-        return Model(img, [validity, label])
+        x = model(inp)
+        out = Flatten()(x)
+        val = Dense(1, activation='sigmoid')(out)
+        label = Dense(self.num_classes, activation='sigmoid')(out)
+        
+        return Model(inp, [val, label])
 
 
     def train(self, epochs, batch_size=32, sample_interval=50, start_point=0):
@@ -191,12 +173,12 @@ class ACGAN():
             g_loss = self.combined.train_on_batch([noise, sampled_labels], [valid, sampled_labels])
 
             # Plot the progress
-            print("%d [LC loss: %f, acc.: %.2f%%, op_acc: %.2f%%] [LS loss: %f]" % (epoch, (d_loss[0] + g_loss[0])/2, 100*d_loss[3], 100*d_loss[4], (d_loss[0] - g_loss[0])/2))
-            utils.write_log( self.writer, ['LC loss', 'LS loss', 'accuracy'], [(d_loss[0] + g_loss[0])/2, (d_loss[0] - g_loss[0])/2, 100*d_loss[3]], epoch)
+            print("%d [D loss: %f, acc.: %.2f%%, op_acc: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[3], 100*d_loss[4],  g_loss[0]))
+            utils.write_log( self.writer, ['D loss', 'G loss', 'accuracy'], [d_loss[0], g_loss[0], 100*d_loss[3]], epoch)
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
-                utils.save_model('celeba', self.generator, self.discriminator, epoch)
+                utils.save_model('acgan/celeba', self.generator, self.discriminator, epoch)
                 self.sample_images(epoch)
 
     def validate(self, glasses=False, male=False):
@@ -252,5 +234,5 @@ class ACGAN():
                 axs[i,j].imshow(gen_imgs[cnt,:,:,:])
                 axs[i,j].axis('off')
                 cnt += 1
-        fig.savefig("../images/%d.png" % epoch)
+        fig.savefig("../images/acgan/%d.png" % epoch)
         plt.close()
