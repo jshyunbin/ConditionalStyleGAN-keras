@@ -31,12 +31,13 @@ class ACGAN():
         log_path = '../logs/acgan'
         self.writer = tf.summary.FileWriter(log_path)
 
-        dis_opt = Adam(0.0002, 0.5)
-        gan_opt = Adam(0.0002, 0.5)
-        losses = ['binary_crossentropy', 'binary_crossentropy']
+        dis_opt = Adam(0.0001, beta_1=0.5, decay=0.00001)
+        gan_opt = Adam(0.0001, beta_1=0.5, decay=0.00001)
+        dis_loss = ['binary_crossentropy', 'binary_crossentropy']
+        gen_loss = ['mse', 'mse']
 
         # Build and compile the discriminator
-        if self.flags.load_model is True:
+        if self.flags.load_model != -1:
             print('Loading ACGAN model...')
             print('Using epoch %d model' % self.flags.load_model)
             json_file_gen = open('../saved_model/generator.json', 'r')
@@ -51,7 +52,7 @@ class ACGAN():
             self.discriminator = self.build_discriminator()
             self.generator = self.build_generator()
         
-        self.discriminator.compile(loss=losses,
+        self.discriminator.compile(loss=dis_loss,
             optimizer=dis_opt,
             metrics=['accuracy'])
 
@@ -72,7 +73,7 @@ class ACGAN():
         # The combined model  (stacked generator and discriminator)
         # Trains the generator to fool the discriminator
         self.combined = Model([noise, label], [valid, target_label])
-        self.combined.compile(loss=losses, optimizer=gan_opt)
+        self.combined.compile(loss=gen_loss, optimizer=gan_opt)
 
     def build_generator(self):
 
@@ -82,19 +83,19 @@ class ACGAN():
         model.add(Reshape((4, 4, 512)))
         model.add(BatchNormalization())
         model.add(UpSampling2D())
-        model.add(Conv2D(256, kernel_size=3, padding='same', kernel_initializer='he_normal'))
+        model.add(Conv2D(256, kernel_size=3, padding='same'))
         model.add(Activation("relu"))
         model.add(BatchNormalization())
         model.add(UpSampling2D())
-        model.add(Conv2D(128, kernel_size=3, padding='same', kernel_initializer='he_normal'))
+        model.add(Conv2D(128, kernel_size=3, padding='same'))
         model.add(Activation("relu"))
         model.add(BatchNormalization())
         model.add(UpSampling2D())
-        model.add(Conv2D(64, kernel_size=3, padding='same', kernel_initializer='he_normal'))
+        model.add(Conv2D(64, kernel_size=3, padding='same'))
         model.add(Activation("relu"))
         model.add(BatchNormalization())
         model.add(UpSampling2D())
-        model.add(Conv2D(self.channels, kernel_size=3, padding='same', kernel_initializer='he_normal'))
+        model.add(Conv2D(self.channels, kernel_size=3, padding='same'))
         model.add(Activation("tanh"))
 
         model.summary()
@@ -112,22 +113,33 @@ class ACGAN():
         inp = Input([self.img_rows, self.img_rows, self.channels])
 
         model = Sequential()
-        model = layers.d_block(model, 32, init=True)
-        model = layers.d_block(model, 64)
-        model = layers.d_block(model, 128)
-        model = layers.d_block(model, 256)
 
+        model.add(Conv2D(64, kernel_size=4, strides=2, input_shape=self.img_shape, padding="same"))
+        model.add(LeakyReLU(alpha=0.2))
+        model.add(Dropout(0.25))
+        model.add(Conv2D(128, kernel_size=4, strides=2, padding="same"))
+        model.add(LeakyReLU(alpha=0.2))
+        model.add(Dropout(0.25))
+        model.add(BatchNormalization(momentum=0.8))
+        model.add(Conv2D(256, kernel_size=4, strides=2, padding="same"))
+        model.add(LeakyReLU(alpha=0.2))
+        model.add(Dropout(0.25))
+        model.add(BatchNormalization(momentum=0.8))
+        model.add(Conv2D(512, kernel_size=4, strides=2, padding="same"))
+        model.add(LeakyReLU(alpha=0.2))
+        model.add(Dropout(0.25))
+
+        model.add(Flatten())
         model.summary()
 
-        x = model(inp)
-        out = Flatten()(x)
+        out = model(inp)
         val = Dense(1, activation='sigmoid')(out)
         label = Dense(self.num_classes, activation='sigmoid')(out)
         
         return Model(inp, [val, label])
 
 
-    def train(self, epochs, batch_size=32, sample_interval=50, start_point=0):
+    def train(self, epochs, batch_size=32, sample_interval=500, start_point=0):
 
         # Load the dataset
         X_train, y_train = utils.load_data(self.writer)

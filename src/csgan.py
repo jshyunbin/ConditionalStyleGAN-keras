@@ -43,12 +43,11 @@ class CSGAN():
         log_path = '../logs/csgan'
         self.writer = tf.summary.FileWriter(log_path)
 
-        dis_opt = Adam(0.0001, beta_1=0, beta_2=0.99, decay=0.00001)
-        gan_opt = Adam(0.0001, beta_1=0, beta_2=0.99, decay=0.00001)
-        partial_gp_loss = partial(gradient_penalty_loss, averaged_samples=)
+        dis_opt = Adam(0.0001, beta_1=0.5, beta_2=0.99, decay=0.00001)
+        gan_opt = Adam(0.0001, beta_1=0.5, beta_2=0.99, decay=0.00001)
         losses = ['mse', 'mse']
 
-        if self.flags.load_model is True:
+        if self.flags.load_model != -1:
             print('Loading CSGAN model...')
             print('Using epoch %d model' % self.flags.load_model)
             json_file_gen = open('../saved_model/csgan/generator.json', 'r')
@@ -66,29 +65,30 @@ class CSGAN():
         self.DM = None
         self.GM = None
         self.build_disModel()
+        self.build_genModel()
 
-        self.discriminator.compile(loss=losses,
-            optimizer=dis_opt,
-            metrics=['accuracy'])
+        # self.discriminator.compile(loss=losses,
+        #     optimizer=dis_opt,
+        #     metrics=['accuracy'])
 
-        # The generator takes noise and the target label as input
-        # and generates the corresponding digit of that label
-        noise = Input(shape=(self.latent_dim,))
-        label = Input(shape=(self.num_classes,))
-        img = self.generator([noise, label])
+        # # The generator takes noise and the target label as input
+        # # and generates the corresponding digit of that label
+        # noise = Input(shape=(self.latent_dim,))
+        # label = Input(shape=(self.num_classes,))
+        # img = self.generator([noise, label])
 
-        # For the combined model we will only train the generator
-        for layer in self.discriminator.layers:
-            layer.trainable = False
+        # # For the combined model we will only train the generator
+        # for layer in self.discriminator.layers:
+        #     layer.trainable = False
 
-        # The discriminator takes generated image as input and determines validity
-        # and the label of that image
-        valid, target_label = self.discriminator(img)
+        # # The discriminator takes generated image as input and determines validity
+        # # and the label of that image
+        # valid, target_label = self.discriminator(img)
 
-        # The combined model  (stacked generator and discriminator)
-        # Trains the generator to fool the discriminator
-        self.combined = Model([noise, label], [valid, target_label])
-        self.combined.compile(loss=losses, optimizer=gan_opt)
+        # # The combined model  (stacked generator and discriminator)
+        # # Trains the generator to fool the discriminator
+        # self.combined = Model([noise, label], [valid, target_label])
+        # self.combined.compile(loss=losses, optimizer=gan_opt)
 
     def g_block(self, inp, style, fil, u = True):
         
@@ -179,7 +179,26 @@ class CSGAN():
 
         partial_gp_loss = partial(gradient_penalty_loss, averaged_samples=ri, weight=5)
 
-        self.DM.compile(optimizer=Adam(0.0001, beta_1=0, beta_2=0.99, decay=0.00001), loss=['mse', 'binary_cross_entropy', 'mse', partial_gp_loss, ])
+        self.DM.compile(optimizer=Adam(0.0001, beta_1=0, beta_2=0.99, decay=0.00001), loss=['binary_cross_entropy', 'binary_cross_entropy', 'binary_cross_entropy', partial_gp_loss, ])
+
+    def build_genModel(self):
+        self.discriminator.trainable = False
+        for layer in self.discriminator.layers:
+            layer.trainable = False
+        
+        self.generator.trainable = True
+        for layer in self.generator.layers: 
+            layer.trainable = True
+        
+        gi = Input(shape=[self.latent_dim])
+        gi2 = Input(shape=[self.num_classes])
+
+        gf = self.generator([gi, gi2])
+        df, dfl = self.discriminator(gf)
+
+        self.AM = Model(inputs=[gi, gi2], outputs=[df, dfl])
+        self.AM.compile(optimizer=Adam(0.0001, beta_1=0, beta_2=0.99, decay=0.00001), loss=['mse', 'mse'])
+
 
     def train(self, epochs, batch_size=32, sample_interval=50, start_point=0):
 
@@ -227,8 +246,10 @@ class CSGAN():
             #  Train Generator
             # ---------------------
 
+            g_loss = self.AM.train_on_batch([noise, sampled_labels], [valid, sampled_labels])
+
             # Train the generator
-            g_loss = self.combined.train_on_batch([noise, sampled_labels], [valid, sampled_labels])
+            # g_loss = self.combined.train_on_batch([noise, sampled_labels], [valid, sampled_labels])
 
             # Plot the progress
             print("%d [D loss: %f, acc.: %.2f%%, op_acc: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[3], 100*d_loss[4], g_loss[0]))
