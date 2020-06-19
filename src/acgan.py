@@ -28,31 +28,35 @@ class ACGAN():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         self.num_classes = 5
         self.latent_dim = 100
-        log_path = '../logs/acgan'
+        
+        if self.flags.log_dir is None:
+            log_path = '../logs/acgan'
+        else: 
+            log_path = '../logs/' + self.flags.log_dir
         self.writer = tf.summary.FileWriter(log_path)
 
-        dis_opt = Adam(0.0001, beta_1=0.5, decay=0.00001)
-        gan_opt = Adam(0.0001, beta_1=0.5, decay=0.00001)
-        dis_loss = ['binary_crossentropy', 'binary_crossentropy']
-        gen_loss = ['mse', 'mse']
+        dis_opt = Adam(0.0001, beta_1=0.5, beta_2=0.99, decay=0.00001)
+        gan_opt = Adam(0.0001, beta_1=0.5, beta_2=0.99, decay=0.00001)
+        d_loss = ['binary_crossentropy', 'binary_crossentropy']
+        g_loss = ['mse', 'mse']
 
         # Build and compile the discriminator
         if self.flags.load_model != -1:
             print('Loading ACGAN model...')
             print('Using epoch %d model' % self.flags.load_model)
-            json_file_gen = open('../saved_model/generator.json', 'r')
-            json_file_dis = open('../saved_model/discriminator.json', 'r')
+            json_file_gen = open('../saved_model/acgan/generator.json', 'r')
+            json_file_dis = open('../saved_model/acgan/discriminator.json', 'r')
             generator_json = json_file_gen.read()
             self.generator = model_from_json(generator_json)
-            self.generator.load_weights('../saved_model/generator_%dweights.hdf5' % self.flags.load_model)
+            self.generator.load_weights('../saved_model/acgan/generator_%dweights.hdf5' % self.flags.load_model)
             discriminator_json = json_file_dis.read()
             self.discriminator = model_from_json(discriminator_json)
-            self.discriminator.load_weights('../saved_model/discriminator_%dweights.hdf5' % self.flags.load_model)
+            self.discriminator.load_weights('../saved_model/acgan/discriminator_%dweights.hdf5' % self.flags.load_model)
         else:
             self.discriminator = self.build_discriminator()
             self.generator = self.build_generator()
         
-        self.discriminator.compile(loss=dis_loss,
+        self.discriminator.compile(loss=d_loss,
             optimizer=dis_opt,
             metrics=['accuracy'])
 
@@ -73,7 +77,7 @@ class ACGAN():
         # The combined model  (stacked generator and discriminator)
         # Trains the generator to fool the discriminator
         self.combined = Model([noise, label], [valid, target_label])
-        self.combined.compile(loss=gen_loss, optimizer=gan_opt)
+        self.combined.compile(loss=g_loss, optimizer=gan_opt)
 
     def build_generator(self):
 
@@ -114,22 +118,12 @@ class ACGAN():
 
         model = Sequential()
 
-        model.add(Conv2D(64, kernel_size=4, strides=2, input_shape=self.img_shape, padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(Conv2D(128, kernel_size=4, strides=2, padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Conv2D(256, kernel_size=4, strides=2, padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Conv2D(512, kernel_size=4, strides=2, padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
+        model = layers.d_block(model, 32, init=True)
+        model = layers.d_block(model, 64)
+        model = layers.d_block(model, 128)
+        model = layers.d_block(model, 256)
 
-        model.add(Flatten())
+        model.add(Flatten())    
         model.summary()
 
         out = model(inp)
@@ -190,7 +184,7 @@ class ACGAN():
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
-                utils.save_model('acgan/celeba', self.generator, self.discriminator, epoch)
+                utils.save_model('acgan/', self.generator, self.discriminator, epoch)
                 self.sample_images(epoch)
 
     def validate(self, glasses=False, male=False):

@@ -21,12 +21,10 @@ from layers import AdaInstanceNormalization
 import keras.backend as K
 import layers
 
-def gradient_penalty_loss(y_true, y_pred, averaged_samples, weight):
+def gradient_penalty_loss(y_true, y_pred, sample_weight, averaged_samples, weight):
     gradients = K.gradients(y_pred, averaged_samples)[0]
     gradients_sqr = K.square(gradients)
-    gradient_penalty = K.sum(gradients_sqr,
-                              axis=np.arange(1, len(gradients_sqr.shape)))
-    
+    gradient_penalty = K.sum(gradients_sqr, axis=np.arange(1, len(gradients_sqr.shape)))
     # weight * ||grad||^2
     # Penalize the gradient norm
     return K.mean(gradient_penalty * weight)
@@ -40,24 +38,36 @@ class CSGAN():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         self.num_classes = 5
         self.latent_dim = 100
-        log_path = '../logs/csgan'
+
+        if self.flags.name is None:
+            log_path = '../logs/csgan'
+        else: 
+            log_path = '../logs/' + self.flags.name
         self.writer = tf.summary.FileWriter(log_path)
 
-        dis_opt = Adam(0.0001, beta_1=0.5, beta_2=0.99, decay=0.00001)
-        gan_opt = Adam(0.0001, beta_1=0.5, beta_2=0.99, decay=0.00001)
-        losses = ['mse', 'mse']
+        if self.flags.name is None:
+            model_path = '../saved_model/csgan'
+        else: 
+            model_path = '../saved_model/' + self.flags.name
+
+        images_path = '../images/%s' % ('csgan' if self.flags.name is None else self.flags.name)
+
+        if not os.path.isdir(model_path):
+            os.mkdir(model_path)
+        if not os.path.isdir(images_path):
+            os.mkdir(images_path)
 
         if self.flags.load_model != -1:
             print('Loading CSGAN model...')
             print('Using epoch %d model' % self.flags.load_model)
-            json_file_gen = open('../saved_model/csgan/generator.json', 'r')
-            json_file_dis = open('../saved_model/csgan/discriminator.json', 'r')
+            json_file_gen = open(os.path.join(model_path, '/generator.json'), 'r')
+            json_file_dis = open(os.path.join(model_path, '/discriminator.json'), 'r')
             generator_json = json_file_gen.read()
             self.generator = model_from_json(generator_json)
-            self.generator.load_weights('../saved_model/csgan/generator_%dweights.hdf5' % self.flags.load_model)
+            self.generator.load_weights(os.path.join(model_path, '/generator_%dweights.hdf5'% self.flags.load_model))
             discriminator_json = json_file_dis.read()
             self.discriminator = model_from_json(discriminator_json)
-            self.discriminator.load_weights('../saved_model/csgan/discriminator_%dweights.hdf5' % self.flags.load_model)
+            self.discriminator.load_weights(os.path.join(model_path, '/discriminator_%dweights.hdf5' % self.flags.load_model))
         else:
             self.discriminator = self.build_discriminator()
             self.generator = self.build_generator()
@@ -67,28 +77,7 @@ class CSGAN():
         self.build_disModel()
         self.build_genModel()
 
-        # self.discriminator.compile(loss=losses,
-        #     optimizer=dis_opt,
-        #     metrics=['accuracy'])
-
-        # # The generator takes noise and the target label as input
-        # # and generates the corresponding digit of that label
-        # noise = Input(shape=(self.latent_dim,))
-        # label = Input(shape=(self.num_classes,))
-        # img = self.generator([noise, label])
-
-        # # For the combined model we will only train the generator
-        # for layer in self.discriminator.layers:
-        #     layer.trainable = False
-
-        # # The discriminator takes generated image as input and determines validity
-        # # and the label of that image
-        # valid, target_label = self.discriminator(img)
-
-        # # The combined model  (stacked generator and discriminator)
-        # # Trains the generator to fool the discriminator
-        # self.combined = Model([noise, label], [valid, target_label])
-        # self.combined.compile(loss=losses, optimizer=gan_opt)
+        print(self.DM.metrics_names)
 
     def g_block(self, inp, style, fil, u = True):
         
@@ -141,15 +130,16 @@ class CSGAN():
         inp = Input([self.img_rows, self.img_rows, self.channels])
 
         model = Sequential()
+
         model = layers.d_block(model, 32, init=True)
         model = layers.d_block(model, 64)
         model = layers.d_block(model, 128)
         model = layers.d_block(model, 256)
+        model.add(Flatten())
 
         model.summary()
 
-        x = model(inp)
-        out = Flatten()(x)
+        out = model(inp)
         val = Dense(1, activation='sigmoid')(out)
         label = Dense(self.num_classes, activation='sigmoid')(out)
         
@@ -171,15 +161,16 @@ class CSGAN():
         gi = Input(shape=[self.latent_dim])
         gi2 = Input(shape=[self.num_classes])
         gf = self.generator([gi, gi2])
-        df = self.discriminator(df)
+        df, df1 = self.discriminator(gf)
 
+        #gradient penalty pipeline
         da, dal = self.discriminator(ri)
 
-        self.DM = Model(inputs=[ri, gi, gi2], outputs=[dr, drl, df, da, dal])
+        self.DM = Model(inputs=[ri, gi, gi2], outputs=[dr, drl, df, df1, da, dal])
 
-        partial_gp_loss = partial(gradient_penalty_loss, averaged_samples=ri, weight=5)
+        partial_gp_loss = partial(gradient_penalty_loss, averaged_samples=ri, weight=10)
 
-        self.DM.compile(optimizer=Adam(0.0001, beta_1=0, beta_2=0.99, decay=0.00001), loss=['binary_cross_entropy', 'binary_cross_entropy', 'binary_cross_entropy', partial_gp_loss, ])
+        self.DM.compile(optimizer=Adam(0.0001, beta_1=0, beta_2=0.99, decay=0.00001), loss=['binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy', partial_gp_loss, partial_gp_loss], metrics=['accuracy'])
 
     def build_genModel(self):
         self.discriminator.trainable = False
@@ -187,7 +178,7 @@ class CSGAN():
             layer.trainable = False
         
         self.generator.trainable = True
-        for layer in self.generator.layers: 
+        for layer in self.generator.layers:
             layer.trainable = True
         
         gi = Input(shape=[self.latent_dim])
@@ -229,35 +220,18 @@ class CSGAN():
 
             # Image labels. 0-9 
             img_labels = y_train[idx]
-
-            d_loss = self.DM.train_on_batch([imgs, noise, sampled_labels], [valid, fake, valid])
-
-
-            # Generate a half batch of new images
-            # gen_imgs = self.generator.predict([noise, sampled_labels])
-
-
-            # # Train the discriminator
-            # d_loss_real = self.discriminator.train_on_batch(imgs, [valid, img_labels])
-            # d_loss_fake = self.discriminator.train_on_batch(gen_imgs, [fake, sampled_labels])
-            # d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
-
-            # ---------------------
-            #  Train Generator
-            # ---------------------
-
+            # Train the discriminator
+            d_loss = self.DM.train_on_batch([imgs, noise, sampled_labels], [valid, img_labels, fake, sampled_labels, valid, img_labels])
+            # Train the generator
             g_loss = self.AM.train_on_batch([noise, sampled_labels], [valid, sampled_labels])
 
-            # Train the generator
-            # g_loss = self.combined.train_on_batch([noise, sampled_labels], [valid, sampled_labels])
-
             # Plot the progress
-            print("%d [D loss: %f, acc.: %.2f%%, op_acc: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[3], 100*d_loss[4], g_loss[0]))
-            utils.write_log( self.writer, ['D loss', 'G loss', 'accuracy'], [d_loss[0], g_loss[0], 100*d_loss[3]], epoch)
+            print("%d [D loss: %f, acc.: %.2f%%, op_acc: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[6], 100*d_loss[7], g_loss[0]))
+            utils.write_log( self.writer, ['D loss', 'G loss', 'accuracy', 'class accuracy'], [d_loss[0], g_loss[0], 100*d_loss[6], 100*d_loss[7]], epoch)
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
-                utils.save_model('csgan/celeba', self.generator, self.discriminator, epoch)
+                utils.save_model('csgan/', self.generator, self.discriminator, epoch)
                 self.sample_images(epoch)
 
     def validate(self, glasses=False, male=False):
@@ -313,5 +287,5 @@ class CSGAN():
                 axs[i,j].imshow(gen_imgs[cnt,:,:,:])
                 axs[i,j].axis('off')
                 cnt += 1
-        fig.savefig("../images/csgan/%d.png" % epoch)
+        fig.savefig("../images/%s/%d.png" % (self.flags.name, epoch))
         plt.close()

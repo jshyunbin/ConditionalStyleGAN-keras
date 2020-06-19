@@ -19,8 +19,8 @@ def save_model(name, generator, discriminator, step):
             open(options['file_arch'], 'w').write(json_string)
             model.save_weights(options['file_weight'])
 
-        save(generator, name + "_generator", step)
-        save(discriminator, name + "_discriminator", step)
+        save(generator, name + "generator", step)
+        save(discriminator, name + "discriminator", step)
 
 def write_log(writer, names, logs, step):
         for name, value in zip(names, logs):

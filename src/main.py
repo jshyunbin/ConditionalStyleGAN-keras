@@ -21,9 +21,12 @@ flags.DEFINE_boolean('validate', False, 'Generate images with the latest generat
 flags.DEFINE_boolean('glasses', False, 'Generate only glasses images when validate')
 flags.DEFINE_boolean('male', False, 'Generate only male images when validate')
 flags.DEFINE_enum('model', 'CSGAN', ['CSGAN', 'CGAN', 'ACGAN'], 'Choose the model you want to train')
+flags.DEFINE_integer('gpu', 0, 'The gpu number you use for training')
+flags.DEFINE_string('name', None, 'the directory name for saving tensorboard data')
 
 
 def main(argv):
+    os.environ['CUDA_VISIBLE_DEVICES'] = '%d' % FLAGS.gpu
     if FLAGS.model == 'CSGAN':
         model = CSGAN(FLAGS)
     elif FLAGS.model == 'ACGAN':
