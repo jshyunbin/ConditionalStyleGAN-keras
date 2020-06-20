@@ -37,7 +37,7 @@ def main(argv):
     if FLAGS.validate:
         model.validate(glasses=FLAGS.glasses, male=FLAGS.male)
     else:
-        model.train(epochs=50000, batch_size=64, sample_interval=200, start_point=FLAGS.load_model+1)
+        model.train(epochs=200000, batch_size=64, sample_interval=200, start_point=FLAGS.load_model+1)
 
 
 if __name__ == '__main__':

@@ -28,12 +28,25 @@ class ACGAN():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         self.num_classes = 5
         self.latent_dim = 100
-        
-        if self.flags.log_dir is None:
+
+        if self.flags.name is None:
             log_path = '../logs/acgan'
         else: 
-            log_path = '../logs/' + self.flags.log_dir
+            log_path = '../logs/' + self.flags.name
         self.writer = tf.summary.FileWriter(log_path)
+
+        if self.flags.name is None:
+            model_path = '../saved_model/acgan'
+        else: 
+            model_path = '../saved_model/' + self.flags.name
+
+        self.images_path = '../images/%s' % ('acgan' if self.flags.name is None else self.flags.name)
+
+        if not os.path.isdir(model_path):
+            os.mkdir(model_path)
+        if not os.path.isdir(self.images_path):
+            os.mkdir(self.images_path)
+
 
         dis_opt = Adam(0.0001, beta_1=0.5, beta_2=0.99, decay=0.00001)
         gan_opt = Adam(0.0001, beta_1=0.5, beta_2=0.99, decay=0.00001)
@@ -44,14 +57,14 @@ class ACGAN():
         if self.flags.load_model != -1:
             print('Loading ACGAN model...')
             print('Using epoch %d model' % self.flags.load_model)
-            json_file_gen = open('../saved_model/acgan/generator.json', 'r')
-            json_file_dis = open('../saved_model/acgan/discriminator.json', 'r')
+            json_file_gen = open(os.path.join(model_path, '/generator.json'), 'r')
+            json_file_dis = open(os.path.join(model_path, '/discriminator.json'), 'r')
             generator_json = json_file_gen.read()
             self.generator = model_from_json(generator_json)
-            self.generator.load_weights('../saved_model/acgan/generator_%dweights.hdf5' % self.flags.load_model)
+            self.generator.load_weights(os.path.join(model_path, '/generator_%dweights.hdf5'% self.flags.load_model))
             discriminator_json = json_file_dis.read()
             self.discriminator = model_from_json(discriminator_json)
-            self.discriminator.load_weights('../saved_model/acgan/discriminator_%dweights.hdf5' % self.flags.load_model)
+            self.discriminator.load_weights(os.path.join(model_path, '/discriminator_%dweights.hdf5' % self.flags.load_model))
         else:
             self.discriminator = self.build_discriminator()
             self.generator = self.build_generator()
@@ -180,11 +193,11 @@ class ACGAN():
 
             # Plot the progress
             print("%d [D loss: %f, acc.: %.2f%%, op_acc: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[3], 100*d_loss[4],  g_loss[0]))
-            utils.write_log( self.writer, ['D loss', 'G loss', 'accuracy'], [d_loss[0], g_loss[0], 100*d_loss[3]], epoch)
+            utils.write_log( self.writer, ['D loss', 'G loss', 'accuracy', 'class accuracy'], [d_loss[0], g_loss[0], 100*d_loss[3], 100*d_loss[4]], epoch)
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
-                utils.save_model('acgan/', self.generator, self.discriminator, epoch)
+                utils.save_model('%s/' % ('acgan' if self.flags.name is None else self.flags.name), self.generator, self.discriminator, epoch)
                 self.sample_images(epoch)
 
     def validate(self, glasses=False, male=False):
@@ -240,5 +253,5 @@ class ACGAN():
                 axs[i,j].imshow(gen_imgs[cnt,:,:,:])
                 axs[i,j].axis('off')
                 cnt += 1
-        fig.savefig("../images/acgan/%d.png" % epoch)
+        fig.savefig(self.images_path + "/%d.png" % (epoch))
         plt.close()
