@@ -189,7 +189,7 @@ class CSGAN():
 
         partial_gp_loss = partial(gradient_penalty_loss, averaged_samples=ri, weight=5)
 
-        self.DM.compile(optimizer=Adam(0.0003, beta_1=0, beta_2=0.99, decay=0.00001), loss=['binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy', partial_gp_loss, partial_gp_loss], metrics=['accuracy'], loss_weights=[10, 0.1, 10, 0.1, 10, 0.1])
+        self.DM.compile(optimizer=Adam(0.0003, beta_1=0, beta_2=0.99, decay=0.00001), loss=['binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy', partial_gp_loss, partial_gp_loss], metrics=['accuracy'], loss_weights=[10, 1, 10, 1, 10, 1])
 
     def build_genModel(self):
         self.discriminator.trainable = False
@@ -208,7 +208,7 @@ class CSGAN():
         df, dfl = self.discriminator(gf)
 
         self.AM = Model(inputs=[gi, gi1, gi2], outputs=[df, dfl])
-        self.AM.compile(optimizer=Adam(0.0003, beta_1=0, beta_2=0.99, decay=0.00001), loss=['mse', 'mse'], loss_weights=[10, 0.1])
+        self.AM.compile(optimizer=Adam(0.0003, beta_1=0, beta_2=0.99, decay=0.00001), loss=['mse', 'mse'], loss_weights=[10, 1])
 
 
     def train(self, epochs, batch_size=32, sample_interval=50, start_point=0):

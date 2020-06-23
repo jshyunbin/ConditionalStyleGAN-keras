@@ -18,7 +18,7 @@ import numpy as np
 import utils
 import layers
 
-class ACGAN():
+class CGAN():
     def __init__(self, flags):
         # Input shape
         self.flags = flags
