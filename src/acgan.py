@@ -57,14 +57,14 @@ class ACGAN():
         if self.flags.load_model != -1:
             print('Loading ACGAN model...')
             print('Using epoch %d model' % self.flags.load_model)
-            json_file_gen = open(os.path.join(model_path, '/generator.json'), 'r')
-            json_file_dis = open(os.path.join(model_path, '/discriminator.json'), 'r')
+            json_file_gen = open(model_path + '/generator.json', 'r')
+            json_file_dis = open(model_path + '/discriminator.json', 'r')
             generator_json = json_file_gen.read()
             self.generator = model_from_json(generator_json)
-            self.generator.load_weights(os.path.join(model_path, '/generator_%dweights.hdf5'% self.flags.load_model))
+            self.generator.load_weights(model_path + '/generator_%dweights.hdf5'% self.flags.load_model)
             discriminator_json = json_file_dis.read()
             self.discriminator = model_from_json(discriminator_json)
-            self.discriminator.load_weights(os.path.join(model_path, '/discriminator_%dweights.hdf5' % self.flags.load_model))
+            self.discriminator.load_weights(model_path + '/discriminator_%dweights.hdf5' % self.flags.load_model)
         else:
             self.discriminator = self.build_discriminator()
             self.generator = self.build_generator()

@@ -4,6 +4,7 @@ from keras.models import Sequential, Model, model_from_json
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, concatenate, Layer, AveragePooling2D
 from keras.layers import BatchNormalization, Activation, Embedding, ZeroPadding2D
 from keras import backend as K
+import numpy as np
 
 # code copied from manicman1999/StyleGAN-Keras directory of GitHub.
 class AdaInstanceNormalization(Layer):
@@ -67,7 +68,7 @@ class AdaInstanceNormalization(Layer):
 
 def d_block(inp, fil, p = True, init=False):
     if init:
-        inp.add(Conv2D(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_normal', input_shape=(64, 64, 3)))
+        inp.add(Conv2D(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_normal', input_shape=np.prod((64, 64, 3))))
     else:
         inp.add(Conv2D(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_normal'))
     inp.add(LeakyReLU(0.01))

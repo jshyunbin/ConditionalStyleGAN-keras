@@ -23,6 +23,7 @@ flags.DEFINE_boolean('male', False, 'Generate only male images when validate')
 flags.DEFINE_enum('model', 'CSGAN', ['CSGAN', 'CGAN', 'ACGAN'], 'Choose the model you want to train')
 flags.DEFINE_integer('gpu', 0, 'The gpu number you use for training')
 flags.DEFINE_string('name', None, 'the directory name for saving tensorboard data')
+flags.DEFINE_integer('batch_size', 64, 'Batch size when training')
 
 
 def main(argv):
@@ -37,7 +38,7 @@ def main(argv):
     if FLAGS.validate:
         model.validate(glasses=FLAGS.glasses, male=FLAGS.male)
     else:
-        model.train(epochs=200000, batch_size=64, sample_interval=200, start_point=FLAGS.load_model+1)
+        model.train(epochs=1000000, batch_size=FLAGS.batch_size, sample_interval=200, start_point=FLAGS.load_model+1)
 
 
 if __name__ == '__main__':

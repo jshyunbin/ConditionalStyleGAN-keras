@@ -37,7 +37,7 @@ class CSGAN():
         self.channels = 3
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         self.num_classes = 5
-        self.latent_dim = 1
+        self.latent_dim = 100
 
         if self.flags.name is None:
             log_path = '../logs/csgan'
@@ -114,7 +114,7 @@ class CSGAN():
 
     def build_generator(self):
         # class label input (latent for StyleGAN)
-        inp_s = Input(shape=[self.num_classes])
+        inp_s = Input(shape=[self.latent_dim])
         sty = Dense(512, kernel_initializer='he_normal')(inp_s)
         sty = LeakyReLU(0.1)(sty)
         sty = Dense(512, kernel_initializer='he_normal')(sty)
@@ -137,7 +137,7 @@ class CSGAN():
         x = self.g_block(x, sty, noi[2], 256)
         x = self.g_block(x, sty, noi[1], 128)
         x = self.g_block(x, sty, noi[0], 64)
-        x = Conv2D(filters = 3, kernel_size = 1, padding = 'same', activation = 'sigmoid')(x)
+        x = Conv2D(filters = 3, kernel_size = 1, padding = 'same', activation = 'tanh')(x)
 
         return Model([inp, inp_n, inp_s], x)
     
@@ -157,10 +157,7 @@ class CSGAN():
 
         out = model(inp)
 
-        x = Dense(128)(out)
-        x = Activation('relu')(x)
-        x = Dropout(0.6)(x)
-        val = Dense(1)(x)
+        val = Dense(1, activation='sigmoid')(out)
 
         label = Dense(self.num_classes, activation='sigmoid')(out)
         
@@ -181,7 +178,7 @@ class CSGAN():
         #fake pipeline
         gi = Input(shape=[1])
         gi1 = Input(shape=[self.img_rows, self.img_cols, 1])
-        gi2 = Input(shape=[self.num_classes])
+        gi2 = Input(shape=[self.latent_dim])
         gf = self.generator([gi, gi1, gi2])
         df, df1 = self.discriminator(gf)
 
@@ -192,7 +189,7 @@ class CSGAN():
 
         partial_gp_loss = partial(gradient_penalty_loss, averaged_samples=ri, weight=5)
 
-        self.DM.compile(optimizer=Adam(0.0003, beta_1=0, beta_2=0.99, decay=0.00001), loss=['binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy', partial_gp_loss, partial_gp_loss], metrics=['accuracy'])
+        self.DM.compile(optimizer=Adam(0.0003, beta_1=0, beta_2=0.99, decay=0.00001), loss=['binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy', partial_gp_loss, partial_gp_loss], metrics=['accuracy'], loss_weights=[10, 0.1, 10, 0.1, 10, 0.1])
 
     def build_genModel(self):
         self.discriminator.trainable = False
@@ -203,15 +200,15 @@ class CSGAN():
         for layer in self.generator.layers:
             layer.trainable = True
         
-        gi = Input(shape=[self.latent_dim])
+        gi = Input(shape=[1])
         gi1 = Input(shape=[self.img_rows, self.img_cols, 1])
-        gi2 = Input(shape=[self.num_classes])
+        gi2 = Input(shape=[self.latent_dim])
 
         gf = self.generator([gi, gi1, gi2])
         df, dfl = self.discriminator(gf)
 
         self.AM = Model(inputs=[gi, gi1, gi2], outputs=[df, dfl])
-        self.AM.compile(optimizer=Adam(0.0003, beta_1=0, beta_2=0.99, decay=0.00001), loss=['mse', 'mse'])
+        self.AM.compile(optimizer=Adam(0.0003, beta_1=0, beta_2=0.99, decay=0.00001), loss=['mse', 'mse'], loss_weights=[10, 0.1])
 
 
     def train(self, epochs, batch_size=32, sample_interval=50, start_point=0):
@@ -222,8 +219,9 @@ class CSGAN():
         # Adversarial ground truths
         ones = np.ones((batch_size, 1))
         zeros = np.zeros((batch_size, 1))
-        nones = -ones
+        halves = 0.5*ones
         
+        enoise = np.random.normal(0.0, 1.0, size = [batch_size, self.latent_dim - self.num_classes])
         enoiseImage = np.random.uniform(0.0, 1.0, size = [batch_size, self.img_rows, self.img_cols, 1])
 
         for epoch in range(start_point, epochs):
@@ -242,16 +240,18 @@ class CSGAN():
             sampled_labels = np.random.uniform(0, 1, (batch_size, self.num_classes))
             sampled_labels = np.around(sampled_labels)
 
+            noise = np.concatenate((sampled_labels, enoise), axis=-1)
+
             # Image labels. 0-9 
             img_labels = y_train[idx]
             # Train the discriminator
-            d_loss = self.DM.train_on_batch([imgs, ones, enoiseImage, sampled_labels], [ones, img_labels, nones, sampled_labels, ones, img_labels])
+            d_loss = self.DM.train_on_batch([imgs, ones, enoiseImage, noise], [ones, img_labels, zeros, sampled_labels, ones, img_labels])
             # Train the generator
-            g_loss = self.AM.train_on_batch([ones, enoiseImage, sampled_labels], [zeros, sampled_labels])
+            g_loss = self.AM.train_on_batch([ones, enoiseImage, noise], [halves, sampled_labels])
 
             # Plot the progress
-            print("%d [D loss: %f, acc.: %.2f%%, op_acc: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[6], 100*d_loss[7], g_loss[0]))
-            utils.write_log( self.writer, ['D loss', 'G loss', 'accuracy', 'class accuracy'], [d_loss[0], g_loss[0], 100*d_loss[6], 100*d_loss[7]], epoch)
+            print("%d [D loss: %f, acc.: %.2f%%, op_acc: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[7], 100*d_loss[8], g_loss[0]))
+            utils.write_log( self.writer, ['D loss', 'G loss', 'accuracy', 'class accuracy'], [d_loss[0], g_loss[0], 100*d_loss[7], 100*d_loss[8]], epoch)
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
@@ -298,10 +298,13 @@ class CSGAN():
     def sample_images(self, epoch):
         r, c = 10, 10
         ones = np.ones((r*c, 1))
+        enoise = np.random.normal(0.0, 1.0, size=[r*c, self.latent_dim - self.num_classes])
         enoiseImage = np.random.uniform(0.0, 1.0, size = [r*c, self.img_rows, self.img_cols, 1])
         sampled_labels = np.random.uniform(0, 1, (r*c, self.num_classes))
         sampled_labels = np.around(sampled_labels)
-        gen_imgs = self.generator.predict([ones, enoiseImage, sampled_labels])
+
+        noise = np.concatenate((sampled_labels, enoise), axis=-1)
+        gen_imgs = self.generator.predict([ones, enoiseImage, noise])
         # Rescale images 0 - 1
         gen_imgs = 0.5 * gen_imgs + 0.5
         utils.write_image(self.writer, 'Generated Image', gen_imgs[:10], step=epoch)
