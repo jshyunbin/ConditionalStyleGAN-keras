@@ -39,24 +39,20 @@ class CSGAN():
         self.num_classes = 5
         self.latent_dim = 100
 
-        if self.flags.name is None:
-            log_path = '../logs/csgan'
-        else: 
-            log_path = '../logs/' + self.flags.name
+        log_path = '../logs/' + self.flags.name
         self.writer = tf.summary.FileWriter(log_path)
 
-        if self.flags.name is None:
-            model_path = '../saved_model/csgan'
-        else: 
-            model_path = '../saved_model/' + self.flags.name
+        model_path = '../saved_model/' + self.flags.name
 
-        self.images_path = '../images/%s' % ('csgan' if self.flags.name is None else self.flags.name)
+        self.images_path = '../images/%s' % self.flags.name
 
         if not os.path.isdir(model_path):
             os.mkdir(model_path)
         if not os.path.isdir(self.images_path):
             os.mkdir(self.images_path)
-
+        if not os.path.isdir('../images_condition/{}'.format(self.flags.name)):
+            os.mkdir('../images_condition/{}'.format(self.flags.name))
+        
         if self.flags.load_model != -1:
             print('Loading CSGAN model...')
             print('Using epoch %d model' % self.flags.load_model)
@@ -208,7 +204,7 @@ class CSGAN():
         df, dfl = self.discriminator(gf)
 
         self.AM = Model(inputs=[gi, gi1, gi2], outputs=[df, dfl])
-        self.AM.compile(optimizer=Adam(0.0003, beta_1=0, beta_2=0.99, decay=0.00001), loss=['mse', 'mse'], loss_weights=[10, 1])
+        self.AM.compile(optimizer=Adam(0.0003, beta_1=0, beta_2=0.99, decay=0.00001), loss=['binary_crossentropy', 'binary_crossentropy'], loss_weights=[10, 1])
 
 
     def train(self, epochs, batch_size=32, sample_interval=50, start_point=0):
@@ -259,41 +255,57 @@ class CSGAN():
                 self.sample_images(epoch)
 
     def validate(self, glasses=False, male=False):
-        noise = np.random.normal(0, 1, (10, self.latent_dim))
-        
+        ones = np.ones((10, 1))
+        enoise = np.random.normal(0.0, 1.0, size=[10, self.latent_dim - self.num_classes])
+        enoiseImage = np.random.uniform(0.0, 1.0, size = [10, self.img_rows, self.img_cols, 1])
+
         if glasses or male:
             for j in range(10):
-                noise = np.random.normal(0, 1, (10, self.latent_dim))
                 fig, axs = plt.subplots(2, 10)
                 label = np.array([[0, 0, 0, 0, 0] for _ in range(10)])
-                img_default = 0.5 * self.generator.predict([noise, label]) + 0.5
+                noise = np.concatenate((label, enoise), axis=-1)
+                img_default = 0.5 * self.generator.predict([ones, enoiseImage, noise]) + 0.5
                 for i in range(10):
                     axs[0, i].imshow(img_default[i])
                     axs[0, i].axis('off')
                 if glasses:
                     label = np.array([[0, 1, 0, 0, 0] for _ in range(10)])
-                    img_condition = 0.5 * self.generator.predict([noise, label]) + 0.5
+                    noise = np.concatenate((label, enoise), axis=-1)
+                    img_condition = 0.5 * self.generator.predict([ones, enoiseImage, noise]) + 0.5
                 elif male:
                     label = np.array([[0, 0, 1, 0, 0] for _ in range(10)])
-                    img_condition = 0.5 * self.generator.predict([noise, label]) + 0.5
+                    noise = np.concatenate((label, enoise), axis=-1)
+                    img_condition = 0.5 * self.generator.predict([ones, enoiseImage, noise]) + 0.5
                 for i in range(10):
                     axs[1, i].imshow(img_condition[i])
                     axs[1, i].axis('off')
-                fig.savefig('../images_condition/validate{}{}.png'.format('_glasses' if glasses else '_male', j))
+                fig.savefig('../images_condition/{}/validate{}{}.png'.format(self.flags.name, '_glasses' if glasses else '_male', j))
+                enoise = np.random.normal(0.0, 1.0, size=[10, self.latent_dim - self.num_classes])
+                enoiseImage = np.random.uniform(0.0, 1.0, size = [10, self.img_rows, self.img_cols, 1])
             return
             
-        fig, axs = plt.subplots(4, 8)
+        img = [[] for _ in range(100)]
+        ones = np.ones((100, 1))
+        enoise = np.random.normal(0.0, 1.0, size=[100, self.latent_dim - self.num_classes])
+        enoiseImage = np.random.uniform(0.0, 1.0, size = [100, self.img_rows, self.img_cols, 1])
         
         for i in range(2**5):
             label_str = "{:05b}".format(i)
             print(label_str)
-            label = np.array([[int(label_str[j]) for j in range(len(label_str))] for _ in range(10)])
-            imgs = 0.5 * self.generator.predict([noise, label]) + 0.5
+            label = np.array([[int(label_str[j]) for j in range(len(label_str))] for _ in range(100)])
+            noise = np.concatenate((label, enoise), axis=-1)
+            imgs = 0.5 * self.generator.predict([ones, enoiseImage, noise]) + 0.5
             utils.write_image(self.writer, 'Image: {}'.format(label_str), imgs)
-            axs[i//(2**3), i%(2**3)].imshow(imgs[0])
-            axs[i//(2**3), i%(2**3)].axis('off')
-        fig.savefig('../images_condition/validate{}{}.png'.format('_glasses' if glasses else '', '_male' if male else ''))
-        plt.close()
+            for j in range(100):
+                img[j].append(imgs[j])
+
+        for j in range(100):
+            fig, axs = plt.subplots(4, 8)
+            for i in range(2**5):
+                axs[i//(2**3), i%(2**3)].imshow(img[j][i])
+                axs[i//(2**3), i%(2**3)].axis('off')
+            fig.savefig('../images_condition/{}/validate{}.png'.format(self.flags.name, j))
+            plt.close()
 
     def sample_images(self, epoch):
         r, c = 10, 10

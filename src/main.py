@@ -28,6 +28,8 @@ flags.DEFINE_integer('batch_size', 64, 'Batch size when training')
 
 def main(argv):
     os.environ['CUDA_VISIBLE_DEVICES'] = '%d' % FLAGS.gpu
+    if FLAGS.name is None:
+        FLAGS.name = FLAGS.model.lower()
     if FLAGS.model == 'CSGAN':
         model = CSGAN(FLAGS)
     elif FLAGS.model == 'ACGAN':
