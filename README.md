@@ -1,6 +1,8 @@
 # Conditional StyleGAN
 CSGAN(Conditional StyleGAN) implementation with Keras. Used CelebA datasets(64 x 64 x 3) and 5 classes for training.
 
+![csgan-generated-images](img/csgan-ex.png)
+
 ## Prerequisites
 
 - tensorflow-gpu: 1.14.0
